@@ -1,15 +1,15 @@
 #include <Arduino.h>
 #define BLYNK_PRINT Serial
-#define BLYNK_TEMPLATE_ID "TMPL2TvUaFapZ"
-#define BLYNK_TEMPLATE_NAME "RC Car"
-#define BLYNK_AUTH_TOKEN "o33wyt-GOtqAHU90RvWxkU4SvFhVXwSS"
+#define BLYNK_TEMPLATE_ID ""           //Replace with your Blynk Template ID
+#define BLYNK_TEMPLATE_NAME "RC Car"   //Replace with your Blynk Template Name
+#define BLYNK_AUTH_TOKEN ""            //Replace with your Blynk Auth Token
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 #include <Servo.h>
 
 // Your Wi-Fi credentials
-char ssid[] = "Realme X2 Pro";        // Replace with your Wi-Fi SSID
-char pass[] = "Ali2182001";  // Replace with your Wi-Fi password
+char ssid[] = "";        // Replace with your Wi-Fi SSID
+char pass[] = "";  // Replace with your Wi-Fi password
 
 void stopMotors();
 
