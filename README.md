@@ -58,4 +58,4 @@ This project is for educational purposes only and is not intended for commercial
 
 ---
 
-*Developed by Ali Mohamed Ali Elmansoury as part of the ITI Embedded Systems Track.*
+*Developed by Eng. Ali Mohamed Ali Elmansoury as part of the ITI Embedded Systems Track.*
