@@ -1,0 +1,432 @@
+#include <Arduino.h>
+#define BLYNK_PRINT Serial
+#define BLYNK_TEMPLATE_ID "TMPL2TvUaFapZ"
+#define BLYNK_TEMPLATE_NAME "RC Car"
+#define BLYNK_AUTH_TOKEN "o33wyt-GOtqAHU90RvWxkU4SvFhVXwSS"
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <Servo.h>
+
+// Your Wi-Fi credentials
+char ssid[] = "Realme X2 Pro";        // Replace with your Wi-Fi SSID
+char pass[] = "Ali2182001";  // Replace with your Wi-Fi password
+
+void stopMotors();
+
+// Motor control pins
+#define IN1 D0  // Left motor control
+#define IN2 D1
+#define ENA D6  // Left motor speed (PWM)
+#define IN3 D3  // Right motor control
+#define IN4 D4
+#define ENB D5  // Right motor speed (PWM)
+
+// Ultrasonic sensor pins
+#define TRIG_F D7  // Front sensor trigger pin
+#define ECHO_F D8  // Front sensor echo pin
+
+/*#define TRIG_L D9  // Left sensor trigger pin
+#define ECHO_L D10 // Left sensor echo pin
+#define TRIG_R D2 // Right sensor trigger pin
+#define ECHO_R 10 // Right sensor echo pin */    
+
+int mode = 0; // Variable for the selected mode
+
+//define sound velocity in cm/uS
+#define SOUND_VELOCITY 0.034
+
+long duration;
+float distanceCm;
+float distanceInch;
+
+#define SERVO_PIN D2
+Servo frontServo;
+int angle = 0;
+
+void setup() {
+  // Initialize Serial Monitor
+  Serial.begin(9600);
+
+  frontServo.attach(SERVO_PIN,500,2400);  // Attach servo
+  frontServo.write(90);  // Set initial position to center
+  
+  // Set motor pins as output
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+  pinMode(ENB, OUTPUT);
+
+  // Set ultrasonic pins as output/input
+  pinMode(TRIG_F, OUTPUT);
+  pinMode(ECHO_F, INPUT);
+
+  /*pinMode(TRIG_L, OUTPUT);
+  pinMode(ECHO_L, INPUT);
+  pinMode(TRIG_R, OUTPUT);
+  pinMode(ECHO_R, INPUT);*/
+
+  // Stop motors at startup
+  stopMotors();
+
+  // Connect to Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  Blynk.virtualWrite(V5, "Connected to Wif");
+  Blynk.virtualWrite(V6, "i");
+}
+
+// Function to stop the motors
+void stopMotors() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(ENA, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  digitalWrite(ENB, LOW);
+}
+
+// Function to move forward
+void moveForward() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(ENA, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  digitalWrite(ENB, HIGH);
+}
+
+// Function to move backward
+void moveBackward() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(ENA, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  digitalWrite(ENB, HIGH);
+}
+
+// Function to turn right
+void turnRight() {
+  digitalWrite(IN1, HIGH);  // Left wheels forward
+  digitalWrite(IN2, LOW);
+  digitalWrite(ENA, HIGH);
+  digitalWrite(IN3, LOW);   // Right wheels backward
+  digitalWrite(IN4, HIGH);
+  digitalWrite(ENB, HIGH);
+}
+
+// Function to turn left
+void turnLeft() {
+  digitalWrite(IN1, LOW);   // Left wheels backward
+  digitalWrite(IN2, HIGH);
+  digitalWrite(ENA, HIGH);
+  digitalWrite(IN3, HIGH);  // Right wheels forward
+  digitalWrite(IN4, LOW);
+  digitalWrite(ENB, HIGH);
+}
+
+void moveForwardWithPWM(int speed) {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, speed);  // Control speed of left motor
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  analogWrite(ENB, speed);  // Control speed of right motor
+}
+
+// Function to move backward with PWM
+void moveBackwardWithPWM(int speed) {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  analogWrite(ENA, speed);  // Control speed of left motor
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENB, speed);  // Control speed of right motor
+}
+
+// Function to turn right with PWM
+void turnRightWithPWM(int speed) {
+  digitalWrite(IN1, HIGH);  // Left wheels forward
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, speed);  // Control speed of left motor
+  digitalWrite(IN3, LOW);   // Right wheels backward
+  digitalWrite(IN4, HIGH);
+  analogWrite(ENB, speed);  // Control speed of right motor
+}
+
+// Function to turn left with PWM
+void turnLeftWithPWM(int speed) {
+  digitalWrite(IN1, LOW);   // Left wheels backward
+  digitalWrite(IN2, HIGH);
+  analogWrite(ENA, speed);  // Control speed of left motor
+  digitalWrite(IN3, HIGH);  // Right wheels forward
+  digitalWrite(IN4, LOW);
+  analogWrite(ENB, speed);  // Control speed of right motor
+}
+
+// Function to measure distance from an ultrasonic sensor
+long measureDistance(int trigPin, int echoPin) {
+
+  // Clears the trigPin
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Reads the echoPin, returns the sound wave travel time in microseconds
+  duration = pulseIn(echoPin, HIGH);
+  
+  // Calculate the distance
+  distanceCm = duration * SOUND_VELOCITY/2;
+
+  return distanceCm;
+}
+
+// Obstacle evasion logic
+/*void obstacleEvasion() {
+  long distFront = measureDistance(TRIG_F, ECHO_F);
+  long distLeft = measureDistance(TRIG_L, ECHO_L);
+  long distRight = measureDistance(TRIG_R, ECHO_R);
+  
+  int turnSpeed = 150; // PWM speed for turning
+
+  // If obstacle detected in front
+  if (distFront < 20) {  // Obstacle within 20 cm in front
+    if (distLeft > 20 && distRight > 20) {
+      if (distLeft > distRight) {
+        moveBackwardWithPWM(turnSpeed);  
+        turnLeftWithPWM(turnSpeed);  // Turn left if left side has more space
+      } else {
+        moveBackwardWithPWM(turnSpeed);  
+        turnRightWithPWM(turnSpeed);  // Turn right if right side has more space
+      }
+    } else if (distLeft > 20) {
+      moveBackwardWithPWM(turnSpeed); 
+      turnLeftWithPWM(turnSpeed);  // Turn left if left side is clear
+    } else if (distRight > 20) {
+      moveBackwardWithPWM(turnSpeed);
+      turnRightWithPWM(turnSpeed);  // Turn right if right side is clear
+    } else {
+      moveBackwardWithPWM(turnSpeed);  // Move backward if both sides are blocked
+    }
+    delay(500);  // Adjust this value to control how long it turns
+  } else {
+    moveForwardWithPWM(turnSpeed);  // If no obstacle in front, keep moving forward
+  }
+
+  // Periodically check for mode change
+  Blynk.run();  // Allow Blynk to process any updates (including mode change)
+  if (mode != 1) {
+    stopMotors();  // Stop motors if mode changes
+    return;  // Exit the function if the mode changes
+  }
+}*/
+
+/*// Obstacle evasion logic
+void obstacleEvasion() {
+  long distFront = measureDistance(TRIG_F, ECHO_F);
+  long distLeft = measureDistance(TRIG_L, ECHO_L);
+  long distRight = measureDistance(TRIG_R, ECHO_R);
+
+  int turnSpeed = 100; // PWM speed for turning
+
+  // If obstacle detected in front, decide whether to turn left or right
+  if (distFront < 20) {  // Obstacle within 20 cm in front
+    if (distLeft > distRight) {
+      turnLeftWithPWM(turnSpeed);  // Turn left if left side has more space
+    } else {
+      turnRightWithPWM(turnSpeed);  // Turn right if right side is clear
+    }
+    delay(500);  // Turn for 500 ms
+  } else {
+    moveForwardWithPWM(turnSpeed);  // If no obstacle in front, keep moving forward
+  }
+  // Periodically check for mode change
+  Blynk.run();  // Allow Blynk to process any updates (including mode change)
+  if (mode != 1) {
+    stopMotors();  // Stop motors if mode changes
+    return;  // Exit the function if the mode changes
+  }
+}*/
+
+// Obstacle evasion logic
+void obstacleEvasion() {
+  int turnSpeed = 100;
+  
+  // Check distances in three directions by rotating the servo
+  frontServo.write(45);  // Move servo to the left
+  delay(500);  // Wait for the sensor to stabilize
+  long distLeft = measureDistance(TRIG_F, ECHO_F);
+
+  frontServo.write(90);  // Move servo to the center
+  delay(500);
+  long distFront = measureDistance(TRIG_F, ECHO_F);
+
+  frontServo.write(135);  // Move servo to the right
+  delay(500);
+  long distRight = measureDistance(TRIG_F, ECHO_F);
+
+  frontServo.write(90);  // Return servo to center
+
+  // Obstacle avoidance logic based on readings
+  if (distFront < 35) {
+    if (distLeft > 35 && distRight > 35) {
+      if (distLeft > distRight) {
+        turnLeftWithPWM(turnSpeed);
+      } else {
+        turnRightWithPWM(turnSpeed);
+      }
+    } else if (distLeft > 35) {
+      turnLeftWithPWM(turnSpeed);
+    } else if (distRight > 35) {
+      turnRightWithPWM(turnSpeed);
+    } else {
+      moveBackwardWithPWM(turnSpeed);
+    }
+    delay(500);  // Adjust as needed
+  } else {
+    moveForwardWithPWM(turnSpeed);
+  }
+
+  // Periodically check for mode change
+  Blynk.run();  // Allow Blynk to process any updates (including mode change)
+  if (mode != 1) {
+    stopMotors();  // Stop motors if mode changes
+    return;  // Exit the function if the mode changes
+  }
+}
+
+// Blynk button V0 to control forward movement
+BLYNK_WRITE(V0) {
+  int value = param.asInt(); // Get button state
+  
+  if (mode == 0 && value == 1) {  // Button pressed, only works in mobile control mode (mode 0)
+    moveForward();
+    Serial.println("Moving Forward");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Moving Forward");
+  } else {  // Button released
+    stopMotors();
+    Serial.println("Stopped");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Stopped");
+  }
+}
+
+// Blynk button V1 to control backward movement
+BLYNK_WRITE(V1) {
+  int value = param.asInt(); // Get button state
+  
+  if (mode == 0 && value == 1) {  // Button pressed, only works in mobile control mode (mode 0)
+    moveBackward();
+    Serial.println("Moving Backward");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Moving Backward");
+  } else {  // Button released
+    stopMotors();
+    Serial.println("Stopped");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Stopped");
+  }
+}
+
+// Blynk button V2 to control right turn
+BLYNK_WRITE(V2) {
+  int value = param.asInt(); // Get button state
+  
+  if (mode == 0 && value == 1) {  // Button pressed, only works in mobile control mode (mode 0)
+    turnRight();
+    Serial.println("Turning Right");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Turning Right");
+  } else {  // Button released
+    stopMotors();
+    Serial.println("Stopped");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Stopped");
+  }
+}
+
+// Blynk button V3 to control left turn
+BLYNK_WRITE(V3) {
+  int value = param.asInt(); // Get button state
+  
+  if (mode == 0 && value == 1) {  // Button pressed, only works in mobile control mode (mode 0)
+    turnLeft();
+    Serial.println("Turning Left");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Turning Left");
+  } else {  // Button released
+    stopMotors();
+    Serial.println("Stopped");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Stopped");
+  }
+}
+
+// Function to switch modes based on slider value
+BLYNK_WRITE(V4) {
+  mode = param.asInt(); // Get slider value (0 to 3)
+  
+  if (mode == 0) {
+    Serial.println("Mode 0: Mobile Control");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Mode 0: Mobile C");
+    Blynk.virtualWrite(V6, "ontrol");
+  } else if (mode == 1) {
+    Serial.println("Mode 1: Obstacle Evasion");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Mode 1: Obstacle");
+    Blynk.virtualWrite(V6, "Evasion");
+  } else if (mode == 2) {
+    Serial.println("Mode 2: Shortest Path in Maze");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Mode 2: Shortest");
+    Blynk.virtualWrite(V6, "Path in Maze");
+    // Add maze-solving logic here
+  } else if (mode == 3) {
+    Serial.println("Mode 3: Line Following");
+    Blynk.virtualWrite(V5, " ");
+    Blynk.virtualWrite(V6, " ");
+    Blynk.virtualWrite(V5, "Mode 3: Line Fol");
+    Blynk.virtualWrite(V6, "lowing");
+    // Add line-following logic here
+  }
+}
+
+// Function to read the numeric input from Blynk on V7
+BLYNK_WRITE(V7) {
+  angle = param.asInt(); // Get the value from the Numeric Input
+  Serial.print("Received Numeric Input: ");
+  Serial.println(angle);
+
+  // Use this value as needed in your program, e.g., adjust speed or distance
+}
+
+void loop() {
+  Blynk.run();  // Runs the Blynk interface
+  /*String distance_F_Cm = String(measureDistance(TRIG_F, ECHO_F));
+  String distance_L_Cm = String(measureDistance(TRIG_L, ECHO_L));
+  String distance_R_Cm = String(measureDistance(TRIG_R, ECHO_R));
+  Blynk.virtualWrite(V5, " ");
+  Blynk.virtualWrite(V6, " ");
+  Blynk.virtualWrite(V5, distance_F_Cm + " " + distance_L_Cm + " " + distance_R_Cm);*/
+  if (mode == 1) {  // If in obstacle evasion mode
+    obstacleEvasion();  // Continuously check for obstacles
+  }
+  frontServo.write(angle);  // Move servo to the specified angle
+}
+
